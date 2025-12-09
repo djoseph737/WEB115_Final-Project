@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TaskFlow — Interactive Task Manager</title>
+  <style>
+    /* Basic responsive layout + aesthetics */
+    :root{
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      --card-bg: #f8f9fb;
+      --accent: #1f6feb;
+      --muted: #1a1270;
+      --shadow: 0 6px 18px rgba(17,24,39,0.06);
+      --radius: 12px;
+    }
+    body {
+      margin: 0;
+      padding: 2rem;
+      background: linear-gradient(180deg,#aeae,#eeeeee);
+      color: #012345; 
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:1rem;
+      margin-bottom:1rem;
+    }
+    header h1 { margin:0; font-size:1.25rem; }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 1rem;
+      box-shadow: var(--shadow);
+      margin-bottom:1rem;
+    }
+    form {
+      display:flex;
+      gap:0.5rem;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    input[type="text"]{
+      flex:1 1 240px;
+      padding:0.5rem;
+      border-radius:8px;
+      border:1px solid #aeae;
+      font-size:0.95rem;
+    }
+    select, label, button {
+      font-size:0.95rem;
+    }
+    .controls {
+      display:flex;
+      gap:0.5rem;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .small {
+      font-size:0.9rem;
+      color:var(--muted);
+    }
+    button {
+      background:var(--accent);
+      color:white;
+      border:none;
+      padding:0.55rem 0.8rem;
+      border-radius:8px;
+      cursor:pointer;
+    }
+    button.danger {
+      background: #ec4444;
+    }
+    #taskmanager { margin-top:1rem; display:flex; flex-direction:column; gap:0.6rem; }
+    .task-row {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:0.75rem;
+      padding:0.6rem;
+      border-radius:8px;
+      background: white;
+      border:1px solid #eea2a7;
+    }
+    .task-left { display:flex; gap:0.75rem; align-items:center; min-width:0; }
+    .task-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:360px; }
+    .meta { font-size:0.82rem; color:var(--muted); }
+    .task-actions { display:flex; gap:0.4rem; align-items:center; }
+    .badge {
+      border-radius:999px;
+      padding: 0.18rem 0.5rem;
+      font-size:0.78rem;
+      font-weight:600;
+    } 
+    @media (max-width:600px){
+      .task-name { max-width:140px; }
+      form { gap:0.35rem; }
+      header { flex-direction:column; align-items:flex-start; gap:0.5rem; }
+    }  
+  </style>  
+</head>
+<body>
+  <div class="container">
+    <header> 
+      <h1>Task Manager</h1>
+      <div class="small"> </div>
+    </header>
+
+    <section class="card" aria-labelledby="task-form-heading">
+      <h2 id="task-form-heading" class="small">Create a new task</h2>
+      <form id="taskForm" onsubmit="return false;">
+        <input id="taskName" type="text" placeholder="Enter task name" aria-label="Task name" />
+        <div class="controls">
+          <label>
+            Priority
+            <select id="taskPriority" aria-label="Task priority">
+              <option value="High">High</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </label>
+
+          <label title="Mark task as important">
+            <input id="taskImportant" type="checkbox" /> Important
+          </label>
+
+          <label title="Mark task as completed">
+            <input id="taskCompleted" type="checkbox" /> Completed
+          </label>
+
+          <button id="addTaskBtn" type="button">Add Task</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="task-list-heading">
+      <h2 id="task-list-heading" class="small">Tasks</h2>
+      <div id="taskmanager" aria-live="polite"></div>
+      <div style="margin-top:0.6rem">
+        <button id="clearAllBtn" class="danger" type="button">Delete All Tasks</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Task Manager JavaScript
+    // Maintains tasks array and renders UI. Every change logs the full array with JSON.stringify(tasks).
+
+    let tasks = []; // array of task objects
+    let nextId = 1; // simple auto-increment id
+       
+    // DOM references   
+    const taskForm = document.getElementById('taskForm');
+    const taskNameInput = document.getElementById('taskName');
+    const taskPrioritySelect = document.getElementById('taskPriority');
+    const taskImportantCheckbox = document.getElementById('taskImportant');
+    const taskCompletedCheckbox = document.getElementById('taskCompleted');
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    const taskManagerDiv = document.getElementById('taskmanager');
+    const clearAllBtn = document.getElementById('clearAllBtn'); 
+
+    // Add task event
+    addTaskBtn.addEventListener('click', () => {  
+      const name = taskNameInput.value.trim();
+      if (!name) { 
+        alert('Task name cannot be empty.');
+        taskNameInput.focus(); 
+        return;
+      }   
+
+      const newTask = {   
+        id: nextId++,
+        name: name,
+        priority: taskPrioritySelect.value,
+        isImportant: taskImportantCheckbox.checked,
+        isCompleted: taskCompletedCheckbox.checked,
+        date: new Date().toISOString()
+      };
+        
+      tasks.push(newTask);
+      renderTasks();           // display
+      console.log(JSON.stringify(tasks)); // required logging
+      taskForm.reset();        // clear input
+      taskNameInput.focus();
+    });
+
+    // Clear all tasks
+    clearAllBtn.addEventListener('click', () => {
+      if (!tasks.length) return;
+      if (!confirm('Delete all tasks?')) return;
+      tasks = [];
+      nextId = 1;
+      renderTasks();
+      console.log(JSON.stringify(tasks));
+    });
+
+    // Event delegation: handle delete, toggle complete, toggle important
+    taskManagerDiv.addEventListener('click', (e) => {
+      const target = e.target;
+      const idStr = target.closest('.task-row')?.dataset?.id;
+      if (!idStr) return;
+      const tid = Number(idStr);
+
+      // Delete button
+      if (target.matches('.btn-delete')) {
+        tasks = tasks.filter(t => t.id !== tid);
+        renderTasks();
+        console.log(JSON.stringify(tasks));
+        return;
+      }
+
+      // Toggle complete button
+      if (target.matches('.btn-toggle-complete')) {
+        const task = tasks.find(t => t.id === tid);
+        if (task) {
+          task.isCompleted = !task.isCompleted;
+          renderTasks();
+          console.log(JSON.stringify(tasks));
+        }
+        return;
+      }
+
+      // Toggle important button
+      if (target.matches('.btn-toggle-important')) {
+        const task = tasks.find(t => t.id === tid);
+        if (task) {
+          task.isImportant = !task.isImportant;
+          renderTasks();
+          console.log(JSON.stringify(tasks));
+        }
+        return;
+      }
+    });
+
+    // Also handle checkbox changes if we use them inside tasks (not required but implemented)
+    taskManagerDiv.addEventListener('change', (e) => {
+      const cb = e.target;
+      if (cb.matches('.task-complete-checkbox')) {
+        const row = cb.closest('.task-row');
+        const tid = Number(row.dataset.id);
+        const task = tasks.find(t => t.id === tid);
+        if (task) {
+          task.isCompleted = cb.checked;
+          renderTasks();
+          console.log(JSON.stringify(tasks));
+        }
+      }
+      if (cb.matches('.task-important-checkbox')) {
+        const row = cb.closest('.task-row');
+        const tid = Number(row.dataset.id);
+        const task = tasks.find(t => t.id === tid);
+        if (task) {
+          task.isImportant = cb.checked;
+          renderTasks();
+          console.log(JSON.stringify(tasks));
+        }
+      }
+    });
+
+    // Render tasks into #taskmanager using .innerHTML then apply styling using element.style
+    function renderTasks() {
+      // Build HTML for all tasks using template strings (innerHTML requirement)
+      if (!tasks.length) {
+        taskManagerDiv.innerHTML = '<div class="small" style="padding:0.6rem;color:var(--muted)">No tasks yet — add one above.</div>';
+        return;
+      }
+
+      let html = '';
+      // Each task row includes elements we can query and style after insertion
+      for (const t of tasks) {
+        const dateStr = new Date(t.date).toLocaleString(); // display-friendly
+        html += `
+          <div class="task-row" data-id="${t.id}">
+            <div class="task-left">
+              <input type="checkbox" class="task-complete-checkbox" ${t.isCompleted ? 'checked' : ''} title="Toggle complete" />
+              <div>
+                <div class="task-name" data-name>${escapeHtml(t.name)}</div>
+                <div class="meta">
+                  <span class="badge priority-badge">${t.priority}</span>
+                  <span style="margin-left:0.5rem">${dateStr}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="task-actions">
+              <label style="display:flex;align-items:center;gap:0.25rem">
+                <input type="checkbox" class="task-important-checkbox" ${t.isImportant ? 'checked' : ''} title="Toggle important"/>
+                <span class="small">Important</span>
+              </label>
+
+              <button class="btn-toggle-important" title="Toggle important (quick)">⭐</button>
+              <button class="btn-toggle-complete" title="Toggle complete (quick)">✔️</button>
+              <button class="btn-delete" title="Delete task">🗑️</button>
+            </div>
+          </div>
+        `;
+      }
+
+      taskManagerDiv.innerHTML = html;
+
+      // Now apply per-task styling using element.style as required.
+      // Loop through each row and set styles based on priority/important/completed.
+      const rows = taskManagerDiv.querySelectorAll('.task-row');
+      rows.forEach(row => {
+        const id = Number(row.dataset.id);
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        // Set background color based on priority using inline style
+        const priorityBadge = row.querySelector('.priority-badge');
+        if (priorityBadge) {
+          // Use style property to style badge
+          priorityBadge.style.backgroundColor = (task.priority === 'High') ? '#fee2e2' : (task.priority === 'Medium') ? '#fef3c7' : '#eef2ff';
+          priorityBadge.style.color = (task.priority === 'High') ? '#991b1b' : (task.priority === 'Medium') ? '#92400e' : '#1e3a8a';
+        }
+
+        // Important tasks must be highlighted in red (task name)
+        const nameEl = row.querySelector('[data-name]');
+        if (nameEl) {
+          if (task.isImportant) {
+            nameEl.style.color = '#b91c1c'; // red
+            nameEl.style.fontWeight = '700';
+          } else {
+            nameEl.style.color = '';
+            nameEl.style.fontWeight = '';
+          }
+        }
+
+        // Completed tasks must have a strikethrough
+        if (task.isCompleted) {
+          if (nameEl) nameEl.style.textDecoration = 'line-through';
+          // dim the whole row slightly
+          row.style.opacity = '0.6';
+        } else {
+          if (nameEl) nameEl.style.textDecoration = 'none';
+          row.style.opacity = '1';
+        }
+      });
+    }
+
+    // HTML escape helper (small utility to avoid raw HTML injection from names)
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    // initial empty render
+    renderTasks();
+
+    // Accessibility: Enter in name input adds task
+    taskNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addTaskBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
